@@ -1,0 +1,129 @@
+pragma solidity >=0.4.22 <0.7.0;
+
+//Players pick a number from 1 to 10
+//Each address is limited to one guess
+//Game is limited to 5 guesses total
+//Players have to pay 100000wei as ticket price for each guess
+//The number that is closest to the average of the numbers (rounded down) is the winning number
+//If your number is a winning number, you get a split of the ticket price. You can collect the winning with withdraw() when game ends.
+//If there is no one with the winning number, the contract self-destructs and the ticket fees go to the owner. 
+
+contract GuessTheAverage {
+    uint public gameEndTime;
+    uint public gameTime = 200;
+    uint public numberOfPlayers;
+    uint public ticketPrice = 100000;
+    uint public maxNumberOfPlayers = 5;
+    uint public winningNumber;
+    uint private sumOfGuesses = 0;
+    uint public numberOfWinners = 0;
+    address payable owner;
+    
+    //for recording addresses and guesses
+    mapping(address => uint) private guesses;
+    
+    //for retrieving guesses to count the number of winners
+    uint[] guessesRecord;
+    
+    bool ended;
+    
+    event NewGuess(address player);
+    event GameEnded(uint winningNumber,uint numberOfWinners);
+    
+    constructor() public {
+        gameEndTime = now + gameTime;
+        numberOfPlayers = 0;
+        owner = msg.sender;
+    }
+    
+    function addGuess(uint playerGuess) public payable{
+        require(
+            now <= gameEndTime,
+            "Game already ended."
+            );
+            
+        require(
+            guesses[msg.sender] == 0,
+            "You already made a guess."
+            );
+        
+        require(
+            numberOfPlayers < maxNumberOfPlayers,
+            "All guesses have already been made."
+            );
+
+        require(
+            playerGuess < 11,
+            "Your guess must be from 1 to 10"
+            );
+            
+        require(
+            playerGuess > 0,
+            "Your guess must be from 1 to 10"
+            );
+            
+        require(
+            msg.value == ticketPrice,
+            "You need to pay the ticket price to make a guess"
+            );
+        
+        numberOfPlayers += 1;
+        
+        //Add new guess to mappings
+        guesses[msg.sender] = playerGuess;
+        
+        //add new guess to array for keeping track of guessed numbers
+        guessesRecord.push(playerGuess);
+        
+        sumOfGuesses += playerGuess;
+        
+        emit NewGuess(msg.sender);
+        
+        
+    }
+    
+    function endGame() public {
+        require (
+            now > gameEndTime,
+            "Not time for the game to end yet."
+            );
+            
+        require (
+            !ended,
+            "endGame() has already been called."
+            );
+        
+        ended = true;
+        
+        winningNumber = sumOfGuesses/numberOfPlayers;
+        emit GameEnded(winningNumber,numberOfWinners);
+        
+        for(uint p=0; p<guessesRecord.length;p++){
+            if (guessesRecord[p] == winningNumber){
+                numberOfWinners += 1;
+            }
+        }
+        
+        if (numberOfWinners == 0){
+            selfdestruct(owner);
+        } 
+    } 
+    
+    function withdraw() public{
+        require (
+            ended,
+            "Use endGame() to end the game first."
+            );
+        
+        require(
+            guesses[msg.sender] == winningNumber,
+            "You don't have the winning number or you already collected your winning."
+            );
+            
+        guesses[msg.sender] = 0;
+        
+        msg.sender.transfer(ticketPrice*numberOfPlayers/numberOfWinners);
+        
+    }
+
+}
